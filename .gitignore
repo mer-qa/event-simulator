@@ -1,0 +1,9 @@
+*.pro.user
+*.o
+Makefile
+RPMS/
+src/simulate-event
+documentation.list
+debugfiles.list
+debuglinks.list
+debugsources.list
