@@ -26,10 +26,17 @@
  *
  ****************************************************************************/
 
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <glob.h>
 #include "simulator.h"
 
+#define DEBUG 0
+
 #define test_bit(a, b) (a[b/8] & (1<<(b%8)))
+#define reject(comment...) { if (DEBUG) fprintf(stderr,comment); close(dev); continue; }
 
 Simulator::Simulator() : evdev(-1)
 {
@@ -38,14 +45,26 @@ Simulator::Simulator() : evdev(-1)
 
 	for (unsigned int i = 0; (i < event_files.gl_pathc) && (evdev==-1); i++) {
 		int dev = open(event_files.gl_pathv[i], O_RDWR);
+		if (DEBUG) fprintf(stderr,"scanning %s\n",event_files.gl_pathv[i]);
 		if (!dev) continue;
+		if (DEBUG) fprintf(stderr,"\topened\n");
 
 		unsigned char abscaps[(ABS_MAX / 8) + 1];
-		if (ioctl(dev, EVIOCGBIT(EV_ABS, sizeof (abscaps)), abscaps) < 0) { close(dev); continue; }
-		if (!(test_bit(abscaps, ABS_MT_POSITION_X) && test_bit(abscaps, ABS_MT_POSITION_Y) && test_bit(abscaps, ABS_MT_PRESSURE))) { close(dev); continue; }
+		if (ioctl(dev, EVIOCGBIT(EV_ABS, sizeof (abscaps)), abscaps) < 0) reject("\tfailed to ioctl EV_ABS\n");
+		if (!(test_bit(abscaps, ABS_MT_POSITION_X) && test_bit(abscaps, ABS_MT_POSITION_Y))) reject("\tno X(%i) or Y(%i)\n",test_bit(abscaps, ABS_MT_POSITION_X), test_bit(abscaps, ABS_MT_POSITION_Y));
+		has_abs_mt_pressure = test_bit(abscaps, ABS_MT_PRESSURE);
+		has_abs_mt_touch_major = test_bit(abscaps, ABS_MT_TOUCH_MAJOR);
+		has_abs_mt_width_major = test_bit(abscaps, ABS_MT_WIDTH_MAJOR);
+		has_abs_mt_tracking_id = test_bit(abscaps, ABS_MT_TRACKING_ID);
+
+		unsigned char keycaps[(KEY_MAX / 8) + 1];
+		if (ioctl(dev, EVIOCGBIT(EV_KEY, sizeof (keycaps)), keycaps) < 0) reject("\tfailed to ioctl EV_KEY\n");
+		has_btn_touch = test_bit(keycaps, BTN_TOUCH);
 
 		kind = ((test_bit(abscaps, ABS_MT_SLOT) && test_bit(abscaps, ABS_MT_TRACKING_ID)) ? B : A);
 		evdev = dev;
+
+		if (DEBUG) fprintf(stderr,"\taccepted, type %c\n",kind+'A');
 	}
 }
 
@@ -79,32 +98,37 @@ void Simulator::drag(int x1, int y1, int x2, int y2, long long int duration)
 
 void Simulator::send_report(int x, int y, int pressure, int tracking_id)
 {
-	struct input_event events[8];
+	struct input_event events[9];
 	int events_count = 0;
+
+	auto enqueue_event = [&](int event_type, int event_code, int value) {
+		events[events_count].type=event_type;
+		events[events_count].code=event_code;
+		events[events_count++].value=value;
+	};
 
 	if (kind == A) {
 		x <<= 1;
 		y <<= 1;
 	}
 
-	if (kind == B) {
-		events[events_count].type=EV_ABS; events[events_count].code=ABS_MT_SLOT;        events[events_count++].value=0;
-		events[events_count].type=EV_ABS; events[events_count].code=ABS_MT_TRACKING_ID; events[events_count++].value=tracking_id;
-	}
+	if (kind == B) enqueue_event(EV_ABS, ABS_MT_SLOT, 0);
+
+	if (has_abs_mt_tracking_id) enqueue_event(EV_ABS, ABS_MT_TRACKING_ID, tracking_id);
 
 	if (pressure >= 0) {
-		events[events_count].type=EV_ABS; events[events_count].code=ABS_MT_POSITION_X;  events[events_count++].value=x;
-		events[events_count].type=EV_ABS; events[events_count].code=ABS_MT_POSITION_Y;  events[events_count++].value=y;
-		events[events_count].type=EV_ABS; events[events_count].code=ABS_MT_PRESSURE;    events[events_count++].value=pressure;
-		events[events_count].type=EV_ABS; events[events_count].code=ABS_MT_TOUCH_MAJOR; events[events_count++].value=6;
+		if (has_btn_touch) enqueue_event(EV_KEY, BTN_TOUCH, (pressure>0)?1:0);
+		enqueue_event(EV_ABS, ABS_MT_POSITION_X, x);
+		enqueue_event(EV_ABS, ABS_MT_POSITION_Y, y);
+		if (has_abs_mt_touch_major) enqueue_event(EV_ABS, ABS_MT_TOUCH_MAJOR, (pressure>0)?((kind==A)?0x32:0x6):0);
+		if (has_abs_mt_width_major) enqueue_event(EV_ABS, ABS_MT_WIDTH_MAJOR, (pressure>0)?((kind==A)?0x32:0x6):0);
+		if (has_abs_mt_pressure) enqueue_event(EV_ABS, ABS_MT_PRESSURE, pressure);
 	}
 
-	if (kind == A) {
-		events[events_count].type=EV_SYN; events[events_count].code=SYN_MT_REPORT;  events[events_count++].value=0;
-	}
+	if (kind == A) enqueue_event(EV_SYN, SYN_MT_REPORT, 0);
 
-	events[events_count].type=EV_SYN; events[events_count].code=SYN_REPORT;  events[events_count++].value=x;
+	enqueue_event(EV_SYN, SYN_REPORT, 0);
 
 	write(evdev,events,sizeof(struct input_event)*events_count);
 }
-	
+
