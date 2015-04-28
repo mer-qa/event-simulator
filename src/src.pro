@@ -4,6 +4,8 @@ TARGET = simulate-event
 target.path += /usr/bin
 INSTALLS = target
 
+CONFIG += c++11
+
 SOURCES += \
     main.cpp \
     simulator.cpp

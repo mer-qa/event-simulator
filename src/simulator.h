@@ -24,11 +24,6 @@
 #ifndef SIMULATOR_H
 #define SIMULATOR_H
 
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include <linux/input.h>
 
@@ -36,6 +31,7 @@ class Simulator {
 public:
 	int evdev;
 	enum DeviceKind { A, B } kind;
+	int has_abs_mt_pressure, has_btn_touch, has_abs_mt_touch_major, has_abs_mt_width_major, has_abs_mt_tracking_id;
 
 	Simulator();
 	~Simulator();
