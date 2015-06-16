@@ -2,7 +2,7 @@ Name:           event-simulator
 Summary:        event-simulator
 Version:        0.1
 Release:        1
-Group:          Daemons
+Group:          Tools
 License:        GPLv2+
 URL:            https://github.com/mer-qa/event-simulator
 Source0:        %{name}-%{version}.tar.gz
