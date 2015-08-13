@@ -86,10 +86,11 @@ void Simulator::click(int x, int y, long long int duration)
 
 void Simulator::drag(int x1, int y1, int x2, int y2, long long int duration)
 {
-	int steps = duration / 10000;
+	const unsigned int delta_T = 10000;
+	int steps = 1 + duration / delta_T;
 	for (int i=0; i<steps; i++) {
 		send_report(x1+((x2-x1)*i/steps),y1+((y2-y1)*i/steps),68,1);
-		usleep(duration/steps);
+		usleep(delta_T);
 	}
 	send_report(x2,y2,0,1);
 	send_report(x2,y2,-1,-1);
