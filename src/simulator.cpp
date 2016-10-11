@@ -79,7 +79,7 @@ void Simulator::click(int x, int y, long long int duration)
 {
 	send_report(x,y,68,1);
 	usleep(duration);
-	send_report(x,y,0,1);
+	if (kind == A) send_report(x,y,0,1);
 	send_report(x,y,-1,-1);
 }
 
@@ -91,7 +91,7 @@ void Simulator::drag(int x1, int y1, int x2, int y2, long long int duration)
 		send_report(x1+((x2-x1)*i/steps),y1+((y2-y1)*i/steps),68,1);
 		usleep(duration/steps);
 	}
-	send_report(x2,y2,0,1);
+	if (kind == A) send_report(x2,y2,0,1);
 	send_report(x2,y2,-1,-1);
 }
 
@@ -120,8 +120,8 @@ void Simulator::send_report(int x, int y, int pressure, int tracking_id)
 		if (has_btn_touch) enqueue_event(EV_KEY, BTN_TOUCH, (pressure>0)?1:0);
 		enqueue_event(EV_ABS, ABS_MT_POSITION_X, x);
 		enqueue_event(EV_ABS, ABS_MT_POSITION_Y, y);
-		if (has_abs_mt_touch_major) enqueue_event(EV_ABS, ABS_MT_TOUCH_MAJOR, (pressure>0)?((kind==A)?0x32:0x6):0);
-		if (has_abs_mt_width_major) enqueue_event(EV_ABS, ABS_MT_WIDTH_MAJOR, (pressure>0)?((kind==A)?0x32:0x6):0);
+		if (has_abs_mt_touch_major) enqueue_event(EV_ABS, ABS_MT_TOUCH_MAJOR, (pressure>0)?((kind==A)?0x32:0x18):0);
+		if (has_abs_mt_width_major) enqueue_event(EV_ABS, ABS_MT_WIDTH_MAJOR, (pressure>0)?((kind==A)?0x32:0x18):0);
 		if (has_abs_mt_pressure) enqueue_event(EV_ABS, ABS_MT_PRESSURE, pressure);
 	}
 
