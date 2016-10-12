@@ -29,17 +29,31 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <glob.h>
 #include "simulator.h"
 
-#define DEBUG 0
+
+#define DEBUG 1
 
 #define test_bit(a, b) (a[b/8] & (1<<(b%8)))
 #define reject(comment...) { if (DEBUG) fprintf(stderr,comment); close(dev); continue; }
 
 Simulator::Simulator() : evdev(-1)
 {
+	int tracking_id_fd = open("/tmp/event-simulator-tracking-id",O_RDONLY);
+	if (tracking_id_fd < 0) {
+		tracking_id = 1;
+	} else {
+		char buffer[13];
+		memset(buffer, 0, sizeof(buffer));
+		read(tracking_id_fd,buffer,12);
+		if (sscanf(buffer,"%d",&tracking_id) != 1) tracking_id = 1;
+		if (DEBUG) fprintf(stderr,"tracking_id from file: %i\n",tracking_id);
+		close(tracking_id_fd);
+	}
+
 	glob_t event_files;
 	if (glob("/dev/input/event*",0,0,&event_files)) throw "shit";
 
@@ -72,15 +86,21 @@ Simulator::Simulator() : evdev(-1)
 Simulator::~Simulator()
 {
 	if (evdev >= 0) close(evdev);
+	int tracking_id_fd = open("/tmp/event-simulator-tracking-id", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	char buffer[13];
+	memset(buffer, 0, sizeof(buffer));
+	write(tracking_id_fd,buffer,snprintf(buffer,12,"%d",tracking_id)+1);
+	close(tracking_id_fd);
 }
 
 
 void Simulator::click(int x, int y, long long int duration)
 {
-	send_report(x,y,68,1);
+	send_report(x,y,68,tracking_id);
 	usleep(duration);
-	if (kind == A) send_report(x,y,0,1);
+	if (kind == A) send_report(x,y,0,tracking_id);
 	send_report(x,y,-1,-1);
+	tracking_id++;
 }
 
 
@@ -88,11 +108,12 @@ void Simulator::drag(int x1, int y1, int x2, int y2, long long int duration)
 {
 	int steps = duration / 10000;
 	for (int i=0; i<steps; i++) {
-		send_report(x1+((x2-x1)*i/steps),y1+((y2-y1)*i/steps),68,1);
+		send_report(x1+((x2-x1)*i/steps),y1+((y2-y1)*i/steps),68,tracking_id);
 		usleep(duration/steps);
 	}
-	if (kind == A) send_report(x2,y2,0,1);
+	if (kind == A) send_report(x2,y2,0,tracking_id);
 	send_report(x2,y2,-1,-1);
+	tracking_id++;
 }
 
 
@@ -131,4 +152,3 @@ void Simulator::send_report(int x, int y, int pressure, int tracking_id)
 
 	write(evdev,events,sizeof(struct input_event)*events_count);
 }
-
