@@ -67,7 +67,7 @@ Simulator::Simulator() : evdev(-1)
 		if (evdev >= 0) {
 			evdev_path_cache_fd = open("/tmp/event-simulator-evdev-path", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 			if (evdev_path_cache_fd >= 0) {
-				write(evdev_path_cache_fd,event_files.gl_pathv[i],strlen(event_files.gl_pathv[i]));
+				write(evdev_path_cache_fd,event_files.gl_pathv[i-1],strlen(event_files.gl_pathv[i-1]));
 				close(evdev_path_cache_fd);
 			}
 		}
