@@ -35,10 +35,10 @@
 #include "simulator.h"
 
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define test_bit(a, b) (a[b/8] & (1<<(b%8)))
-#define reject(comment...) { if (DEBUG) fprintf(stderr,comment); close(dev); continue; }
+#define reject(comment...) { if (DEBUG) fprintf(stderr,comment); close(dev); return -1; }
 
 Simulator::Simulator() : evdev(-1)
 {
@@ -54,31 +54,29 @@ Simulator::Simulator() : evdev(-1)
 		close(tracking_id_fd);
 	}
 
-	glob_t event_files;
-	if (glob("/dev/input/event*",0,0,&event_files)) throw "shit";
+	int evdev_path_cache_fd = open("/tmp/event-simulator-evdev-path",O_RDONLY);
+	if (evdev_path_cache_fd < 0) {
+		glob_t event_files;
+		if (glob("/dev/input/event*",0,0,&event_files)) throw "shit";
 
-	for (unsigned int i = 0; (i < event_files.gl_pathc) && (evdev==-1); i++) {
-		int dev = open(event_files.gl_pathv[i], O_RDWR);
-		if (DEBUG) fprintf(stderr,"scanning %s\n",event_files.gl_pathv[i]);
-		if (!dev) continue;
-		if (DEBUG) fprintf(stderr,"\topened\n");
+		unsigned int i;
+		for (i = 0; (i < event_files.gl_pathc) && (evdev==-1); i++) {
+			evdev = open_evdev(event_files.gl_pathv[i]);
+		}
 
-		unsigned char abscaps[(ABS_MAX / 8) + 1];
-		if (ioctl(dev, EVIOCGBIT(EV_ABS, sizeof (abscaps)), abscaps) < 0) reject("\tfailed to ioctl EV_ABS\n");
-		if (!(test_bit(abscaps, ABS_MT_POSITION_X) && test_bit(abscaps, ABS_MT_POSITION_Y))) reject("\tno X(%i) or Y(%i)\n",test_bit(abscaps, ABS_MT_POSITION_X), test_bit(abscaps, ABS_MT_POSITION_Y));
-		has_abs_mt_pressure = test_bit(abscaps, ABS_MT_PRESSURE);
-		has_abs_mt_touch_major = test_bit(abscaps, ABS_MT_TOUCH_MAJOR);
-		has_abs_mt_width_major = test_bit(abscaps, ABS_MT_WIDTH_MAJOR);
-		has_abs_mt_tracking_id = test_bit(abscaps, ABS_MT_TRACKING_ID);
-
-		unsigned char keycaps[(KEY_MAX / 8) + 1];
-		if (ioctl(dev, EVIOCGBIT(EV_KEY, sizeof (keycaps)), keycaps) < 0) reject("\tfailed to ioctl EV_KEY\n");
-		has_btn_touch = test_bit(keycaps, BTN_TOUCH);
-
-		kind = ((test_bit(abscaps, ABS_MT_SLOT) && test_bit(abscaps, ABS_MT_TRACKING_ID)) ? B : A);
-		evdev = dev;
-
-		if (DEBUG) fprintf(stderr,"\taccepted, type %c\n",kind+'A');
+		if (evdev >= 0) {
+			evdev_path_cache_fd = open("/tmp/event-simulator-evdev-path", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+			if (evdev_path_cache_fd >= 0) {
+				write(evdev_path_cache_fd,event_files.gl_pathv[i],strlen(event_files.gl_pathv[i]));
+				close(evdev_path_cache_fd);
+			}
+		}
+	} else {
+		char buffer[33];
+		memset(buffer, 0, sizeof(buffer));
+		read(evdev_path_cache_fd,buffer,32);
+		close(tracking_id_fd);
+		evdev = open_evdev(buffer);
 	}
 }
 
@@ -86,11 +84,41 @@ Simulator::Simulator() : evdev(-1)
 Simulator::~Simulator()
 {
 	if (evdev >= 0) close(evdev);
-	int tracking_id_fd = open("/tmp/event-simulator-tracking-id", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-	char buffer[13];
-	memset(buffer, 0, sizeof(buffer));
-	write(tracking_id_fd,buffer,snprintf(buffer,12,"%d",tracking_id)+1);
-	close(tracking_id_fd);
+
+	int tracking_id_fd = open("/tmp/event-simulator-tracking-id", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	if (tracking_id_fd >= 0) {
+		char buffer[13];
+		memset(buffer, 0, sizeof(buffer));
+		write(tracking_id_fd,buffer,snprintf(buffer,12,"%d",tracking_id)+1);
+		close(tracking_id_fd);
+	}
+}
+
+
+int Simulator::open_evdev(char *path)
+{
+	int dev = open(path, O_RDWR);
+	if (DEBUG) fprintf(stderr,"scanning %s\n",path);
+	if (dev < 0) return -1;
+	if (DEBUG) fprintf(stderr,"\topened\n");
+
+	unsigned char abscaps[(ABS_MAX / 8) + 1];
+	if (ioctl(dev, EVIOCGBIT(EV_ABS, sizeof (abscaps)), abscaps) < 0) reject("\tfailed to ioctl EV_ABS\n");
+	if (!(test_bit(abscaps, ABS_MT_POSITION_X) && test_bit(abscaps, ABS_MT_POSITION_Y))) reject("\tno X(%i) or Y(%i)\n",test_bit(abscaps, ABS_MT_POSITION_X), test_bit(abscaps, ABS_MT_POSITION_Y));
+	has_abs_mt_pressure = test_bit(abscaps, ABS_MT_PRESSURE);
+	has_abs_mt_touch_major = test_bit(abscaps, ABS_MT_TOUCH_MAJOR);
+	has_abs_mt_width_major = test_bit(abscaps, ABS_MT_WIDTH_MAJOR);
+	has_abs_mt_tracking_id = test_bit(abscaps, ABS_MT_TRACKING_ID);
+
+	unsigned char keycaps[(KEY_MAX / 8) + 1];
+	if (ioctl(dev, EVIOCGBIT(EV_KEY, sizeof (keycaps)), keycaps) < 0) reject("\tfailed to ioctl EV_KEY\n");
+	has_btn_touch = test_bit(keycaps, BTN_TOUCH);
+
+	kind = ((test_bit(abscaps, ABS_MT_SLOT) && test_bit(abscaps, ABS_MT_TRACKING_ID)) ? B : A);
+
+	if (DEBUG) fprintf(stderr,"\taccepted, type %c\n",kind+'A');
+
+	return dev;
 }
 
 

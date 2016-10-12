@@ -37,6 +37,8 @@ public:
 	Simulator();
 	~Simulator();
 
+	int open_evdev(char *path);
+
 	void click(int x, int y, long long int duration);
 	void drag(int x1, int y1, int x2, int y2, long long int duration);
 	void send_report(int x, int y, int pressure, int tracking_id);
