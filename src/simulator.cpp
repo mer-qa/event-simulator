@@ -2,7 +2,8 @@
  *
  *  main.cpp - event-simulator, an event simulator for Jolla QA.
  *  Copyright (C) 2015 Jolla Ltd.
- *  Contact: Maciej Blomberg <maciej.blomberg@jolla.com>
+ *                2016 Mikoton Ltd.
+ *  Contact: Maciej Blomberg <maciej.blomberg@mikoton.com>
  *
  *  This file is part of event-simulator.
 
@@ -134,10 +135,11 @@ void Simulator::click(int x, int y, long long int duration)
 
 void Simulator::drag(int x1, int y1, int x2, int y2, long long int duration)
 {
-	int steps = duration / 10000;
+	const unsigned int delta_T = 10000;
+	int steps = 1 + duration / delta_T;
 	for (int i=0; i<steps; i++) {
 		send_report(x1+((x2-x1)*i/steps),y1+((y2-y1)*i/steps),68,tracking_id);
-		usleep(duration/steps);
+		usleep(delta_T);
 	}
 	if (kind == A) send_report(x2,y2,0,tracking_id);
 	send_report(x2,y2,-1,-1);
