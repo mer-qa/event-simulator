@@ -32,10 +32,13 @@ public:
 	int evdev;
 	enum DeviceKind { A, B } kind;
 	int has_abs_mt_pressure, has_btn_touch, has_abs_mt_touch_major, has_abs_mt_width_major, has_abs_mt_tracking_id;
+	int tracking_id;
 
 	Simulator();
 	~Simulator();
-	
+
+	int open_evdev(char *path);
+
 	void click(int x, int y, long long int duration);
 	void drag(int x1, int y1, int x2, int y2, long long int duration);
 	void send_report(int x, int y, int pressure, int tracking_id);
